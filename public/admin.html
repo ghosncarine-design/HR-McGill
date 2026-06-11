@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>McGill HR Assistant — Admin</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.0.0/tabler-icons.min.css"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f4f4f4; color: #1a1a1a; padding: 32px 16px; }
+  .container { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .sub { color: #666; font-size: 13px; margin-bottom: 28px; }
+  .card { background: #fff; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; }
+  .card h2 { font-size: 14px; font-weight: 600; margin-bottom: 14px; color: #444; text-transform: uppercase; letter-spacing: 0.04em; }
+  .row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+  label { font-size: 13px; color: #666; min-width: 110px; }
+  input[type=text], input[type=password] { flex: 1; border: 0.5px solid rgba(0,0,0,0.15); border-radius: 8px; padding: 8px 12px; font-size: 14px; font-family: inherit; outline: none; }
+  input:focus { border-color: #CC0000; }
+  button { padding: 9px 18px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-family: inherit; font-weight: 500; transition: opacity 0.15s; }
+  .btn-primary { background: #CC0000; color: #fff; }
+  .btn-primary:hover { opacity: 0.88; }
+  .btn-secondary { background: #f0f0f0; color: #333; border: 0.5px solid rgba(0,0,0,0.1); }
+  .btn-secondary:hover { background: #e8e8e8; }
+  #status-box { background: #f8f8f8; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 14px 16px; font-size: 13px; line-height: 1.6; min-height: 60px; color: #555; }
+  #pages-list { margin-top: 12px; max-height: 320px; overflow-y: auto; }
+  .page-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 0.5px solid rgba(0,0,0,0.06); font-size: 12px; }
+  .page-row:last-child { border-bottom: none; }
+  .page-title { flex: 1; font-weight: 500; color: #222; }
+  .page-source { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #f0f0f0; color: #555; flex-shrink: 0; }
+  .page-source.worker { background: #e6f1fb; color: #185fa5; }
+  .page-source.general { background: #eaf3de; color: #3b6d11; }
+  .page-url { color: #CC0000; font-size: 11px; text-decoration: none; flex-shrink: 0; }
+  .msg { margin-top: 10px; font-size: 13px; padding: 8px 12px; border-radius: 8px; }
+  .msg.success { background: #eaf3de; color: #3b6d11; }
+  .msg.error { background: #fcebeb; color: #a32d2d; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>McGill HR Assistant — Admin Panel</h1>
+  <p class="sub">Manage the knowledgebase index. Keep this page private.</p>
+
+  <div class="card">
+    <h2>Authentication</h2>
+    <div class="row">
+      <label>Admin secret</label>
+      <input type="password" id="secret" placeholder="Enter your ADMIN_SECRET" />
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Knowledgebase Status</h2>
+    <div id="status-box">Click "Refresh status" to check.</div>
+    <div style="margin-top:12px; display:flex; gap:8px;">
+      <button class="btn-secondary" onclick="getStatus()"><i class="ti ti-refresh"></i> Refresh status</button>
+      <button class="btn-primary" onclick="triggerCrawl()"><i class="ti ti-spider"></i> Re-crawl knowledgebase</button>
+    </div>
+    <div id="crawl-msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Indexed pages</h2>
+    <button class="btn-secondary" onclick="getPages()"><i class="ti ti-list"></i> Load page list</button>
+    <div id="pages-list"></div>
+  </div>
+</div>
+
+<script>
+  function secret() { return document.getElementById('secret').value.trim(); }
+
+  async function getStatus() {
+    const res = await fetch('/admin/status', { headers: { 'x-admin-secret': secret() } });
+    const data = await res.json();
+    if (data.error) { document.getElementById('status-box').textContent = '❌ ' + data.error; return; }
+    document.getElementById('status-box').innerHTML =
+      `<strong>Status:</strong> ${data.status}<br>
+       <strong>Pages indexed:</strong> ${data.pagesIndexed}<br>
+       <strong>Last crawled:</strong> ${data.lastCrawled || 'Never'}<br>
+       <strong>Message:</strong> ${data.message}<br><br>` +
+      (data.sources || []).map(s => `• ${s.name}: ${s.pages} pages`).join('<br>');
+    if (data.status === 'crawling') setTimeout(getStatus, 3000);
+  }
+
+  async function triggerCrawl() {
+    const msgEl = document.getElementById('crawl-msg');
+    msgEl.innerHTML = '';
+    const res = await fetch('/admin/crawl', {
+      method: 'POST',
+      headers: { 'x-admin-secret': secret(), 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (data.error) {
+      msgEl.innerHTML = `<div class="msg error">${data.error}</div>`;
+    } else {
+      msgEl.innerHTML = `<div class="msg success">Crawl started! Refresh status to monitor progress.</div>`;
+      setTimeout(getStatus, 2000);
+    }
+  }
+
+  async function getPages() {
+    const res = await fetch('/admin/pages', { headers: { 'x-admin-secret': secret() } });
+    const data = await res.json();
+    if (data.error) { document.getElementById('pages-list').textContent = data.error; return; }
+    const listEl = document.getElementById('pages-list');
+    listEl.innerHTML = `<p style="font-size:12px;color:#666;margin:10px 0">${data.total} pages total</p>` +
+      data.pages.map(p => {
+        const cls = p.source.toLowerCase().includes('hourly') ? 'worker' : 'general';
+        return `<div class="page-row">
+          <span class="page-title">${p.title}</span>
+          <span class="page-source ${cls}">${p.source}</span>
+          <a class="page-url" href="${p.url}" target="_blank"><i class="ti ti-external-link"></i></a>
+        </div>`;
+      }).join('');
+  }
+</script>
+</body>
+</html>
